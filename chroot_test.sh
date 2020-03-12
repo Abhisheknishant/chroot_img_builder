@@ -92,8 +92,9 @@ echo "Issue 'su pi' if you need to work as the user pi."
 rsync -avz --progress templates/ /mnt/raspbian/templates/
 
 # chroot to raspbian
-chroot /mnt/raspbian /bin/bash /templates/prepare.sh
-chroot /mnt/raspbian /bin/bash /templates/install.sh
+#chroot /mnt/raspbian /bin/bash /templates/prepare.sh
+#chroot /mnt/raspbian /bin/bash /templates/install.sh
+chroot /mnt/raspbian df -lh
 
 # ----------------------------
 # Clean up
