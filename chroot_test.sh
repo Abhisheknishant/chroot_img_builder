@@ -37,12 +37,29 @@
 
 mkdir -p /mnt/raspbian
 
+qemu-img resize result.img 5G
+
+sudo losetup /dev/loop1 result.img
+sudo kpartx -av /dev/loop1
+
+parted /dev/loop1 resizepart 2 4500
+e2fsck -f /dev/mapper/loop1p2
+resize2fs /dev/mapper/loop1p2
+
+sleep 3
+
+# unmount loop device
+kpartx -d /dev/loop1
+kpartx -v -d result.img
+losetup -d /dev/loop1
+
+echo "TAG -- 1"
+
+
 BOOT_START_SECTOR=$(fdisk -l result.img | grep W95 | awk '{print $2}')
 BOOT_START_POSITION=$(($BOOT_START_SECTOR * 512))
 ROOT_START_SECTOR=$(fdisk -l result.img | grep Linux | awk '{print $2}')
 ROOT_START_POSITION=$(($ROOT_START_SECTOR * 512))
-  
-  
 
 ## mount partition
 # mount -o rw ${1}2  /mnt/raspbian
@@ -59,17 +76,21 @@ mount --bind /proc /mnt/raspbian/proc/
 mount --bind /dev/pts /mnt/raspbian/dev/pts
 
 # ld.so.preload fix
-sed -i 's/^/#CHROOT /g' /mnt/raspbian/etc/ld.so.preload
+#sed -i 's/^/#CHROOT /g' /mnt/raspbian/etc/ld.so.preload
 
 # copy qemu binary
-cp /usr/bin/qemu-arm-static /mnt/raspbian/usr/bin/
+#cp /usr/bin/qemu-arm-static /mnt/raspbian/usr/bin/
 
 echo "You will be transferred to the bash shell now."
 echo "Issue 'exit' when you are done."
 echo "Issue 'su pi' if you need to work as the user pi."
 
+# Add the "templates" folder to the root partition
+rsync -avz --progress templates/ /mnt/raspbian/templates/
+
 # chroot to raspbian
-chroot /mnt/raspbian /bin/bash
+chroot /mnt/raspbian /bin/bash /templates/prepare.sh
+chroot /mnt/raspbian /bin/bash /templates/install.sh
 
 # ----------------------------
 # Clean up
@@ -79,3 +100,15 @@ sed -i 's/^#CHROOT //g' /mnt/raspbian/etc/ld.so.preload
 # unmount everything
 umount /mnt/raspbian/{dev/pts,dev,sys,proc,boot,}
 
+
+echo "Shrinking result.img"
+path_to_executable=$(which pishrink.sh)
+if [ ! -x "$path_to_executable" ] ; then
+    wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
+    mv pishrink.sh /usr/bin/.
+    chmod +x /usr/bin/pishrink.sh
+fi
+
+pishrink.sh result.img
+
+exit 0

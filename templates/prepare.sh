@@ -1,8 +1,8 @@
 #!/usr/bin bash
 
 # Resize File system
-parted /dev/sda resizepart 2 4500
-resize2fs /dev/sda2
+#parted /dev/sda resizepart 2 4500
+#resize2fs /dev/sda2
 
 # Add a public ssh key
 mkdir -p /root/.ssh

@@ -57,7 +57,7 @@ cp $RASPI_IMG $RASPI_WORK_IMG
 
 qemu-img resize $RASPI_WORK_IMG 5G
 
-if [[ "$OSTYPE" == "linux-gnu" ]]; then
+if [[ "$OSTYPE" == "linux-gnu" ]] || [[ "$OSTYPE" == "linux-gnueabihf" ]] ; then
 	add_ssh_file_linux
 elif [[ "$OSTYPE" == "darwin"* ]]; then
 	echo "ERROR: add ssh file is not yet implemtend on macos"
@@ -67,6 +67,8 @@ else
 	echo "ERROR: add ssh file is not yet implemented on this system $OSTYPE"
 	exit 1
 fi
+
+exit 0
 
 ############################
 # Exit QEMU VM
