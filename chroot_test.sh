@@ -35,6 +35,9 @@
 # https://gist.github.com/htruong/0271d84ae81ee1d301293d126a5ad716
 # so it's better just to let the pi resize the partitions
 
+apt update
+apt install -y kpartx
+
 mkdir -p /mnt/raspbian
 
 qemu-img resize result.img 5G
