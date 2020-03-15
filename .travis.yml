@@ -1,3 +1,5 @@
+sudo: require
+
 matrix:
   include:
    - os: linux
