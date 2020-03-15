@@ -1,68 +1,84 @@
 #!/bin/bash
 
-# This script allows you to chroot ("work on") 
-# the raspbian sd card as if it's the raspberry pi
-# on your Ubuntu desktop/laptop
-# just much faster and more convenient
+set -x
 
-# credits: https://gist.github.com/jkullick/9b02c2061fbdf4a6c4e8a78f1312a689
+RASPI_IMG="./2020-02-13-raspbian-buster-lite.img"
+RASPI_WORK_IMG="./result.img"
 
-# make sure you have issued
-# (sudo) apt install qemu qemu-user-static binfmt-support
-
-# Write the raspbian image onto the sd card,
-# boot the pi with the card once 
-# so it expands the fs automatically
-# then plug back to your laptop/desktop
-# and chroot to it with this script.
-
-# Invoke:
-# (sudo) ./chroot-to-pi.sh /dev/sdb 
-# assuming /dev/sdb is your sd-card
-# if you don't know, when you plug the card in, type:
-# dmesg | tail -n30 
+RASPI_IMG_URL="https://downloads.raspberrypi.org/raspbian_lite/images/raspbian_lite-2020-02-14/2020-02-13-raspbian-buster-lite.zip"
+KERNEL_IMG_URL="https://raw.githubusercontent.com/dhruvvyas90/qemu-rpi-kernel/master/kernel-qemu-4.4.34-jessie"
 
 
-# Note: If you have an image file instead of the sd card, 
-# you will need to issue 
-# (sudo) apt install kpartx
-# (sudo) kpartx -v -a 2017-11-29-raspbian-stretch-lite.img
-# then
-# (sudo) ./chroot-to-pi.sh /dev/mapper/loop0p
-# With the vanilla image, you have very little space to work on
-# I have not figured out a reliable way to resize it
-# Something like this should work, but it didn't in my experience
-# https://gist.github.com/htruong/0271d84ae81ee1d301293d126a5ad716
-# so it's better just to let the pi resize the partitions
+if [ ! -f kernel.img ]; then
+  wget $KERNEL_IMG_URL -O kernel.img -o logs_download_kernel.log
+fi
 
-apt update
-apt install -y kpartx
+if [ ! -f $RASPI_IMG ]; then
+  wget $RASPI_IMG_URL -O raspi_image.img.zip -o logs_download_raspbian.log
+  unzip raspi_image.img.zip
+  mv *raspbian*.img $RASPI_IMG
+fi
 
-mkdir -p /mnt/raspbian
+cp $RASPI_IMG $RASPI_WORK_IMG
 
-qemu-img resize result.img 5G
+######### BEGIN ##########
+# Extend the image by 3gb
+dd if=/dev/zero bs=1M count=3092 >> result.img
 
-sudo losetup /dev/loop1 result.img
-sudo kpartx -av /dev/loop1
+#do the parted stuff, unmount kpartx, then mount again
+kpartx -v -a result.img
+LOOP_DEVICE=$(losetup -a | grep -v "(deleted)" | grep "result.img" | sed 's/:.*//g')
+LOOP_DEVICE_NAME=$(echo "$LOOP_DEVICE" | sed 's/.*\///g')
 
-parted /dev/loop1 resizepart 2 4500
-e2fsck -f /dev/mapper/loop1p2
-resize2fs /dev/mapper/loop1p2
+partprobe $LOOP_DEVICE
+
+start=$(cat /sys/block/$LOOP_DEVICE_NAME/${LOOP_DEVICE_NAME}p2/start)
+end=$(($start+$(cat /sys/block/$LOOP_DEVICE_NAME/${LOOP_DEVICE_NAME}p2/size)))
+newend=$(($(cat /sys/block/$LOOP_DEVICE_NAME/size)-8))
+size_mbytes=$(( ($newend - $start) * 512 / (1024 * 1024) ))
+#size_mbytes
+
+# bash
+
+parted $LOOP_DEVICE resizepart 2  $size_mbytes
+# (echo d; echo 2; echo w; echo q) | fdisk -u  $LOOP_DEVICE
+# (echo n; echo p; echo 2; echo ; echo ;) | fdisk -u $LOOP_DEVICE
 
 sleep 3
 
+# # unmount loop device
+kpartx -d $LOOP_DEVICE
+losetup -d $LOOP_DEVICE
+
+# # kpartx -d /dev/loop0
+
+kpartx -v -a result.img
+LOOP_DEVICE=$(losetup -a | grep -v "(deleted)" | grep "result.img" | sed 's/:.*//g')
+LOOP_DEVICE_NAME=$(echo "$LOOP_DEVICE" | sed 's/.*\///g')
+
+# check file system
+e2fsck -f /dev/mapper/${LOOP_DEVICE_NAME}p2
+# #expand partition
+resize2fs /dev/mapper/${LOOP_DEVICE_NAME}p2
+
+# bash
+
 # unmount loop device
-kpartx -d /dev/loop1
-kpartx -v -d result.img
-losetup -d /dev/loop1
+kpartx -d $LOOP_DEVICE
+losetup -d $LOOP_DEVICE
+######### END ##########
 
-echo "TAG -- 1"
-
+if [ -d  /mnt/raspbian ]; then
+    rm -rf /mnt/raspbian
+fi
+mkdir -p /mnt/raspbian
 
 BOOT_START_SECTOR=$(fdisk -l result.img | grep W95 | awk '{print $2}')
 BOOT_START_POSITION=$(($BOOT_START_SECTOR * 512))
 ROOT_START_SECTOR=$(fdisk -l result.img | grep Linux | awk '{print $2}')
 ROOT_START_POSITION=$(($ROOT_START_SECTOR * 512))
+  
+  
 
 ## mount partition
 # mount -o rw ${1}2  /mnt/raspbian
@@ -82,7 +98,7 @@ mount --bind /dev/pts /mnt/raspbian/dev/pts
 #sed -i 's/^/#CHROOT /g' /mnt/raspbian/etc/ld.so.preload
 
 # copy qemu binary
-#cp /usr/bin/qemu-arm-static /mnt/raspbian/usr/bin/
+cp /usr/bin/qemu-arm-static /mnt/raspbian/usr/bin/
 
 echo "You will be transferred to the bash shell now."
 echo "Issue 'exit' when you are done."
@@ -92,27 +108,16 @@ echo "Issue 'su pi' if you need to work as the user pi."
 rsync -avz --progress templates/ /mnt/raspbian/templates/
 
 # chroot to raspbian
-#chroot /mnt/raspbian /bin/bash /templates/prepare.sh
-#chroot /mnt/raspbian /bin/bash /templates/install.sh
+chroot /mnt/raspbian df -lh
+chroot /mnt/raspbian /bin/bash /templates/prepare.sh
+chroot /mnt/raspbian /bin/bash /templates/install.sh
 chroot /mnt/raspbian df -lh
 
 # ----------------------------
 # Clean up
 # revert ld.so.preload fix
-sed -i 's/^#CHROOT //g' /mnt/raspbian/etc/ld.so.preload
+#sed -i 's/^#CHROOT //g' /mnt/raspbian/etc/ld.so.preload
 
 # unmount everything
 umount /mnt/raspbian/{dev/pts,dev,sys,proc,boot,}
 
-
-echo "Shrinking result.img"
-path_to_executable=$(which pishrink.sh)
-if [ ! -x "$path_to_executable" ] ; then
-    wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
-    mv pishrink.sh /usr/bin/.
-    chmod +x /usr/bin/pishrink.sh
-fi
-
-pishrink.sh result.img
-
-exit 0
