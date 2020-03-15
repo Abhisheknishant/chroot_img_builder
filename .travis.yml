@@ -3,10 +3,10 @@ matrix:
    - os: linux
      arch: arm64     
 before_install:
-  - apt update
-  - apt install -y qemu
+  - sudo apt update
+  - sudo apt install -y qemu
 script:
-  - bash build_chroot.sh
+  - sudo bash build_chroot.sh
 cache:
   directories:
   - $HOME/travis_cache
