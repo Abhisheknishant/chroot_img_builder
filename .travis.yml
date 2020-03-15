@@ -4,7 +4,7 @@ matrix:
      arch: arm64     
 before_install:
   - sudo apt update
-  - sudo apt install -y qemu
+  - sudo apt install -y qemu kpartx
 script:
   - sudo bash build_chroot.sh
 cache:
