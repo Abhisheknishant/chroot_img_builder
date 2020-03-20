@@ -27,6 +27,8 @@ dd if=/dev/zero bs=1M count=3092 >> result.img
 
 #do the parted stuff, unmount kpartx, then mount again
 kpartx -v -a result.img
+sleep 3
+
 LOOP_DEVICE=$(losetup -a | grep -v "(deleted)" | grep "result.img" | sed 's/:.*//g')
 LOOP_DEVICE_NAME=$(echo "$LOOP_DEVICE" | sed 's/.*\///g')
 
@@ -55,6 +57,8 @@ losetup -d $LOOP_DEVICE
 kpartx -v -a result.img
 LOOP_DEVICE=$(losetup -a | grep -v "(deleted)" | grep "result.img" | sed 's/:.*//g')
 LOOP_DEVICE_NAME=$(echo "$LOOP_DEVICE" | sed 's/.*\///g')
+
+sleep 3
 
 # check file system
 e2fsck -f /dev/mapper/${LOOP_DEVICE_NAME}p2
@@ -121,3 +125,11 @@ chroot /mnt/raspbian df -lh
 # unmount everything
 umount /mnt/raspbian/{dev/pts,dev,sys,proc,boot,}
 
+# Shrink the image
+wget https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh
+chmod +x pishrink.sh
+sudo mv pishrink.sh /usr/local/bin
+
+pishrink.sh result.img
+
+exit 0
